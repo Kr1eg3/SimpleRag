@@ -413,10 +413,10 @@ if __name__ == '__main__':
             if input().lower() == 'y':
                 rag.load_vectorstore(chroma_path)
             else:
-                rag.load_documents("D:/WorkFolder/Spec/lcevc.pdf")
+                rag.load_documents("./data")  # или путь к вашим документам
                 rag.create_vectorstore()
         else:
-            rag.load_documents("D:/WorkFolder/Spec/lcevc.pdf")
+            rag.load_documents("./data")  # или путь к вашим документам
             rag.create_vectorstore()
 
         rag.create_qa_chain()
