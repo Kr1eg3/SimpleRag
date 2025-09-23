@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "rag-claude-agent": {
+      "command": "python",
+      "args": [
+        "/Users/arkadiypozharskiy/CppProjects/SimpleRag/mcp_fastmcp_claude_agent.py"
+      ],
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  }
+}
