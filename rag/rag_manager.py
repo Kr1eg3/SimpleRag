@@ -106,22 +106,25 @@ class RAGManager:
 
         return result
 
-    def search_documents(self, query: str, k: Optional[int] = None) -> List[Dict]:
+    def search_documents(self, query: str, k: Optional[int] = None, include_ids: bool = True) -> List[Dict]:
         """Поиск документов без генерации ответа"""
         if not self.retriever:
             raise ValueError("Database not set up")
 
-        results = self.retriever.search_with_scores(query, k=k)
-
-        formatted_results = []
-        for doc, score in results:
-            formatted_results.append({
-                "content": doc.page_content,
-                "metadata": doc.metadata,
-                "similarity_score": score
-            })
-
-        return formatted_results
+        if include_ids:
+            # Используем новый метод с ID
+            return self.retriever.search_with_scores_and_ids(query, k=k)
+        else:
+            # Старый метод без ID
+            results = self.retriever.search_with_scores(query, k=k)
+            formatted_results = []
+            for doc, score in results:
+                formatted_results.append({
+                    "content": doc.page_content,
+                    "metadata": doc.metadata,
+                    "similarity_score": score
+                })
+            return formatted_results
 
     def is_ready(self) -> bool:
         """Проверить готовность системы"""

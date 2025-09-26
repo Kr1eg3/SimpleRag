@@ -1,6 +1,6 @@
 from typing import List, Dict, Any, Optional
 from langchain.schema import Document
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
 
 
 class Retriever:
@@ -37,6 +37,32 @@ class Retriever:
         """Поиск с оценками релевантности"""
         k = k or self.default_k
         return self.vectorstore.similarity_search_with_score(query, k=k, **kwargs)
+
+    def search_with_scores_and_ids(
+        self,
+        query: str,
+        k: Optional[int] = None,
+        **kwargs
+    ) -> List[Dict]:
+        """Поиск с оценками релевантности и ID чанков"""
+        k = k or self.default_k
+
+        # Получаем результаты с score и ids
+        results_with_scores = self.vectorstore.similarity_search_with_score(query, k=k, **kwargs)
+
+        formatted_results = []
+        for doc, score in results_with_scores:
+            # ChromaDB автоматически генерирует ID для каждого документа
+            chunk_id = getattr(doc, 'id', None) or doc.metadata.get('chunk_id', 'unknown')
+
+            formatted_results.append({
+                "id": chunk_id,
+                "content": doc.page_content,
+                "metadata": doc.metadata,
+                "similarity_score": score
+            })
+
+        return formatted_results
 
     def search_with_metadata_filter(
         self,

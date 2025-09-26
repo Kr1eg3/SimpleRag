@@ -16,6 +16,7 @@ huggingface-hub>=0.23.0
 
 # Vector store
 chromadb>=0.4.24
+langchain-chroma>=0.1.0
 # Зависимости для chromadb
 onnxruntime>=1.18.0
 tokenizers>=0.19.1
