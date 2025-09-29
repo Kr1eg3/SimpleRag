@@ -3,6 +3,10 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+# Duplicated Go modules in server/ (for Docker)
+server/go.mod
+server/go.sum
+
 # C extensions
 *.so
 

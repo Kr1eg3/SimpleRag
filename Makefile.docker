@@ -1,0 +1,95 @@
+# Docker-specific Makefile for SimpleRAG
+# Docker Compose automation commands
+
+.PHONY: docker-build docker-up docker-down docker-dev docker-logs docker-clean
+
+# Production Docker commands
+docker-build:
+	@echo "Building Docker images..."
+	docker-compose build --no-cache
+
+docker-up:
+	@echo "Starting SimpleRAG services..."
+	docker-compose up -d
+	@echo "Services started:"
+	@echo "  - RAG API: http://localhost:8008"
+	@echo "  - MCP Server: http://localhost:8009"
+	@echo "Run 'make docker-logs' to see logs"
+
+docker-down:
+	@echo "Stopping SimpleRAG services..."
+	docker-compose down
+
+docker-restart: docker-down docker-up
+
+docker-logs:
+	@echo "Following logs for all services..."
+	docker-compose logs -f
+
+docker-status:
+	@echo "Docker services status:"
+	docker-compose ps
+
+# Development Docker commands
+docker-dev:
+	@echo "Starting SimpleRAG in development mode..."
+	docker-compose -f docker-compose.dev.yml up -d
+	@echo "Development services started:"
+	@echo "  - RAG API: http://localhost:8008 (with hot reload)"
+	@echo "  - Python Debugger: port 5678"
+	@echo "  - MCP Server: http://localhost:8009"
+	@echo "  - Go Debugger: port 40000"
+
+docker-dev-down:
+	@echo "Stopping development services..."
+	docker-compose -f docker-compose.dev.yml down
+
+docker-dev-logs:
+	@echo "Following development logs..."
+	docker-compose -f docker-compose.dev.yml logs -f
+
+# Maintenance commands
+docker-clean:
+	@echo "Cleaning up Docker resources..."
+	docker-compose down -v --remove-orphans
+	docker system prune -f
+	docker volume prune -f
+
+docker-rebuild:
+	@echo "Rebuilding all images..."
+	docker-compose down
+	docker-compose build --no-cache
+	docker-compose up -d
+
+# Health checks
+docker-health:
+	@echo "Checking service health..."
+	@curl -f http://localhost:8008/health && echo "✅ RAG API healthy" || echo "❌ RAG API unhealthy"
+	@curl -f http://localhost:8009/health && echo "✅ MCP Server healthy" || echo "❌ MCP Server unhealthy"
+
+# Quick setup for new users
+docker-setup: docker-build docker-up
+	@echo "SimpleRAG Docker setup complete!"
+	@echo "Connect to Claude Code with:"
+	@echo "  claude mcp add -t http go-mcp http://127.0.0.1:8009/sse"
+
+docker-help:
+	@echo "SimpleRAG Docker Commands:"
+	@echo ""
+	@echo "Production:"
+	@echo "  make docker-setup    - Build and start services (first time)"
+	@echo "  make docker-up       - Start services"
+	@echo "  make docker-down     - Stop services"
+	@echo "  make docker-restart  - Restart services"
+	@echo "  make docker-logs     - View logs"
+	@echo "  make docker-status   - Show service status"
+	@echo ""
+	@echo "Development:"
+	@echo "  make docker-dev      - Start with debugging & hot reload"
+	@echo "  make docker-dev-down - Stop development services"
+	@echo "  make docker-dev-logs - View development logs"
+	@echo ""
+	@echo "Maintenance:"
+	@echo "  make docker-clean    - Clean up resources"
+	@echo "  make docker-rebuild  - Rebuild and restart"
+	@echo "  make docker-health   - Check service health"

@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  # Python RAG HTTP API
+  rag-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: simplerag-api
+    ports:
+      - "8008:8008"
+    volumes:
+      - ./data:/app/data:ro           # Documents (read-only)
+      - ./rag_data:/app/rag_data      # ChromaDB storage (read-write)
+      - ./sessions.db:/app/sessions.db # Session database
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TMPDIR=/tmp/claude
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8008/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - simplerag-network
+
+  # Go MCP Server
+  mcp-server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: simplerag-mcp
+    ports:
+      - "8009:8009"
+    depends_on:
+      rag-api:
+        condition: service_healthy
+    environment:
+      - PYTHON_RAG_URL=http://rag-api:8008
+      - GO_MCP_HOST=0.0.0.0
+      - GO_MCP_PORT=8009
+      - GO_MCP_EXTERNAL_HOST=192.168.0.71
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8009/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - simplerag-network
+
+networks:
+  simplerag-network:
+    driver: bridge
+    name: simplerag-net
+
+volumes:
+  rag_data:
+    name: simplerag-chromadb
+  data:
+    name: simplerag-documents

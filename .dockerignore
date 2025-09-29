@@ -1,0 +1,67 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+build/
+vendor/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation
+*.md
+LICENSE
+
+# Build artifacts
+dist/
+*.egg-info/
+
+# Temporary files
+*.tmp
+*.log
+*.sqlite
+*.db
+
+# Don't ignore required data
+!sessions.db
+
+# Examples and test files
+examples/
+test_*.py
+*_test.go
+
+# Config files (may contain secrets)
+.env
+config.json
+*.json
+
+# Large files
+*.pdf
+*.zip
+*.tar.gz

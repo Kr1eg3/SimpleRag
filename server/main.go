@@ -21,6 +21,7 @@ type Config struct {
 	PythonRAGURL string
 	Port         string
 	Host         string
+	ExternalHost string // External accessible address for OAuth callbacks
 }
 
 // RAG service client
@@ -417,7 +418,8 @@ func loadConfig() *Config {
 	config := &Config{
 		PythonRAGURL: "http://127.0.0.1:8008",
 		Port:         "8009",
-		Host:         "127.0.0.1",
+		Host:         "0.0.0.0", // Changed from 127.0.0.1 to bind on all interfaces
+		ExternalHost: "127.0.0.1", // Default external address
 	}
 
 	if url := os.Getenv("PYTHON_RAG_URL"); url != "" {
@@ -430,6 +432,10 @@ func loadConfig() *Config {
 
 	if host := os.Getenv("GO_MCP_HOST"); host != "" {
 		config.Host = host
+	}
+
+	if extHost := os.Getenv("GO_MCP_EXTERNAL_HOST"); extHost != "" {
+		config.ExternalHost = extHost
 	}
 
 	return config
@@ -459,7 +465,9 @@ func main() {
 
 	// Initialize OAuth manager
 	serverAddr := config.Host + ":" + config.Port
-	globalOAuthManager = NewSimpleOAuthManager(serverAddr)
+	// Use external address for OAuth URLs
+	externalAddr := config.ExternalHost + ":" + config.Port
+	globalOAuthManager = NewSimpleOAuthManager(externalAddr)
 	globalOAuthManager.setupEndpoints()
 
 	// Create MCP server
@@ -516,10 +524,11 @@ func main() {
 	})
 
 	log.Printf("🚀 Starting Go MCP Server on http://%s", serverAddr)
+	log.Printf("🌐 External address: http://%s", externalAddr)
 	log.Printf("🐍 Python RAG Service URL: %s", config.PythonRAGURL)
 	log.Printf("📋 Available tools: initialize_rag, search_documents, get_system_status, session_management")
-	log.Printf("🔗 MCP endpoint: http://%s/sse", serverAddr)
-	log.Printf("💡 For Claude Code: claude add http://%s/sse", serverAddr)
+	log.Printf("🔗 MCP endpoint: http://%s/sse", externalAddr)
+	log.Printf("💡 For Claude Code: claude mcd add -t http go-mcp http://%s/sse", externalAddr)
 	log.Printf("📊 Session Management: SQLite database (./sessions.db)")
 	log.Printf("🔐 OAuth 2.1 endpoints (MCP-compliant):")
 	log.Printf("   GET  /.well-known/oauth-authorization-server - OAuth Discovery metadata")

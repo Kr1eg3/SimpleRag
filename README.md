@@ -22,43 +22,63 @@ Claude Code ←→ Go MCP Server ←→ Python RAG HTTP API ←→ ChromaDB
 
 ### Prerequisites
 
+**Option A: Docker (Recommended)**
+- Docker & Docker Compose
+- Claude Code CLI
+
+**Option B: Native**
 - Go 1.19+
 - Python 3.12+
 - Claude Code CLI
 
-### 1. Install Python Dependencies
+## 🐳 Docker Setup (Recommended)
 
+### 1. Quick Start with Docker
+```bash
+# Build and start all services
+make -f Makefile.docker docker-setup
+
+# Or manually:
+docker-compose up -d
+```
+
+### 2. Connect to Claude Code
+```bash
+claude mcp add -t http go-mcp http://127.0.0.1:8009/sse
+```
+
+### 3. Useful Docker Commands
+```bash
+make -f Makefile.docker docker-logs     # View logs
+make -f Makefile.docker docker-status   # Check status
+make -f Makefile.docker docker-down     # Stop services
+make -f Makefile.docker docker-help     # See all commands
+```
+
+### 4. Development Mode (with debugging)
+```bash
+make -f Makefile.docker docker-dev      # Start with hot reload
+```
+
+## 🔧 Native Setup
+
+### 1. Install Python Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-Or install manually:
-```bash
-pip install fastapi uvicorn chromadb langchain langchain-anthropic sentence-transformers pypdf python-dotenv
-```
-
 ### 2. Start Python RAG API
-
 ```bash
 python rag_http_server.py --host 127.0.0.1 --port 8008
 ```
 
 ### 3. Build and Start Go MCP Server
-
-**Option A: Using Makefile (Recommended)**
 ```bash
-make build    # Build binary
-make run      # Build and run server
-```
-
-**Option B: Manual Build**
-```bash
-cd server && go build -o ../simplerag-mcp.exe .
-./simplerag-mcp.exe
+make build && make run
+# Or: cd server && go run .
 ```
 
 ### 4. Connect to Claude Code
-
 ```bash
 claude mcp add -t http go-mcp http://127.0.0.1:8009/sse
 ```
