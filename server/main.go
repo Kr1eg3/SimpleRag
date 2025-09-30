@@ -52,10 +52,10 @@ type RAGResponse struct {
 
 // Document structure from RAG API
 type Document struct {
-	ID             string                 `json:"id"`
-	Content        string                 `json:"content"`
-	Metadata       map[string]interface{} `json:"metadata"`
-	SimilarityScore float64               `json:"similarity_score"`
+	ID              string                 `json:"id"`
+	Content         string                 `json:"content"`
+	Metadata        map[string]interface{} `json:"metadata"`
+	SimilarityScore float64                `json:"similarity_score"`
 }
 
 // MCP Tool Input/Output structures
@@ -247,7 +247,7 @@ func searchDocumentsTool(ragClient *RAGClient) func(
 		}
 
 		// Get user_id from OAuth context (may be empty for unauthenticated requests)
-		userID, _ := ctx.Value("user_id").(string)
+		userID, _ := ctx.Value(userIDKey).(string)
 
 		// Filter out chunks user has already seen (only if authenticated)
 		if userID != "" && sessionManager != nil {
@@ -418,7 +418,7 @@ func loadConfig() *Config {
 	config := &Config{
 		PythonRAGURL: "http://127.0.0.1:8008",
 		Port:         "8009",
-		Host:         "0.0.0.0", // Changed from 127.0.0.1 to bind on all interfaces
+		Host:         "0.0.0.0",   // Changed from 127.0.0.1 to bind on all interfaces
 		ExternalHost: "127.0.0.1", // Default external address
 	}
 
@@ -440,6 +440,11 @@ func loadConfig() *Config {
 
 	return config
 }
+
+// Define a custom type for context keys
+type contextKey string
+
+const userIDKey contextKey = "user_id"
 
 // Global session manager and OAuth manager
 var sessionManager *SimpleSessionManager
@@ -504,11 +509,18 @@ func main() {
 			token := strings.TrimPrefix(authHeader, "Bearer ")
 			if oauthToken, exists := globalOAuthManager.tokens[token]; exists && !isTokenExpired(oauthToken) {
 				// Add user_id to request context
-				ctx := context.WithValue(req.Context(), "user_id", oauthToken.UserID)
+				ctx := context.WithValue(req.Context(), userIDKey, oauthToken.UserID)
 				*req = *req.WithContext(ctx)
 				log.Printf("🔐 Authenticated user: %s", oauthToken.UserID)
 			}
 		}
+		if userIDHeader := req.Header.Get("X-User-ID"); userIDHeader != "" {
+			// For testing purposes, allow setting user_id via header
+			ctx := context.WithValue(req.Context(), userIDKey, userIDHeader)
+			*req = *req.WithContext(ctx)
+			log.Printf("🔐 Test user from header: %s", userIDHeader)
+		}
+
 		return server
 	}, nil)
 

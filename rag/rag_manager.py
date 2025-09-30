@@ -3,7 +3,6 @@ from pathlib import Path
 
 from .database.builder import DatabaseBuilder
 from .retrieval.retriever import Retriever
-from .generation.llm_manager import LLMManager
 from .utils.config import Config
 
 
@@ -20,18 +19,8 @@ class RAGManager:
         )
 
         self.retriever = None
-        self.llm_manager = None
         self.qa_chain = None
 
-        # Инициализируем LLM если есть API ключ
-        api_key = self.config.get("anthropic_api_key")
-        if api_key:
-            self.llm_manager = LLMManager(
-                api_key=api_key,
-                model=self.config.get("model"),
-                temperature=self.config.get("temperature"),
-                max_tokens=self.config.get("max_tokens")
-            )
 
     def setup_database(
         self,
@@ -62,19 +51,6 @@ class RAGManager:
         self.retriever = Retriever(vectorstore)
         self.retriever.set_default_k(self.config.get("default_k"))
 
-    def setup_qa_chain(self, prompt_template: Optional[str] = None):
-        """Настроить цепочку вопрос-ответ"""
-        if not self.retriever:
-            raise ValueError("Database not set up. Call setup_database() first")
-
-        if not self.llm_manager:
-            raise ValueError("LLM manager not initialized. Check API key")
-
-        retriever_obj = self.retriever.get_retriever()
-        self.qa_chain = self.llm_manager.create_qa_chain(
-            retriever=retriever_obj,
-            prompt_template=prompt_template
-        )
 
     def query(self, question: str, return_sources: bool = True) -> Dict[str, Any]:
         """Задать вопрос системе"""
@@ -130,6 +106,5 @@ class RAGManager:
         """Проверить готовность системы"""
         return all([
             self.retriever is not None,
-            self.llm_manager is not None,
             self.qa_chain is not None
         ])

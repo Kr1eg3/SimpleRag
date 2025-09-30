@@ -99,7 +99,6 @@ SimpleRag/
 │   └── rag_manager.py        # Main RAG manager
 ├── rag_http_server.py         # Python RAG HTTP API
 ├── main.py                   # Legacy main application
-├── mcp_fastmcp_claude_agent.py # FastMCP Claude agent
 ├── Makefile                   # Build automation
 ├── requirements.txt           # Python dependencies
 ├── go.mod, go.sum            # Go dependencies

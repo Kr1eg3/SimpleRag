@@ -62,7 +62,7 @@ class RAGHTTPServer:
         self._auto_initialize()
 
     def get_or_create_rag_manager(self) -> Optional[RAGManager]:
-        """Get or create RAG manager (without LLM)"""
+        """Get or create RAG manager"""
         if self.rag_manager:
             return self.rag_manager
 
@@ -73,10 +73,8 @@ class RAGHTTPServer:
             persist_dir = "./rag_data"
             config.set("persist_directory", persist_dir)
 
-            # No LLM configuration - we'll use Claude Agent instead
-            config.set("llm_provider", "claude_agent")
 
-            # Create RAG manager without LLM
+            # Create RAG manager
             self.rag_manager = RAGManager(config)
             self.config = config
 
@@ -161,7 +159,6 @@ class RAGHTTPServer:
                 "data_path": request.data_path,
                 "chunk_size": request.chunk_size,
                 "chunk_overlap": request.chunk_overlap,
-                "llm_provider": "claude_agent",
                 "vector_search_ready": True
             }
 
@@ -221,7 +218,6 @@ class RAGHTTPServer:
         rag_manager = self.get_or_create_rag_manager()
 
         status_data = {
-            "llm_provider": "claude_agent",
             "vector_search_available": True,
             "rag_manager_initialized": rag_manager is not None,
             "retriever_ready": rag_manager.retriever is not None if rag_manager else False,
