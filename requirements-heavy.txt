@@ -1,0 +1,26 @@
+# Тяжеловесные зависимости (ML/AI, долгая установка)
+
+# Core LangChain
+langchain>=0.1.16
+langchain-community>=0.0.38
+langchain-core>=0.1.52
+
+# Embeddings и трансформеры
+langchain-huggingface>=0.0.3
+sentence-transformers>=2.7.0
+huggingface-hub>=0.23.0
+tokenizers>=0.19.1
+
+# Vector store
+chromadb>=0.4.24
+langchain-chroma>=0.1.0
+onnxruntime>=1.18.0
+
+# Data processing
+pandas>=2.2.0
+numpy>=1.26.4
+scipy>=1.13.0
+
+# Document processing
+pypdf>=4.2.0
+unstructured>=0.13.7

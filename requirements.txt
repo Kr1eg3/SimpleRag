@@ -1,48 +1,7 @@
-# Python 3.12+ compatible requirements
-# Сначала установите базовые инструменты
-setuptools>=68.0.0
-wheel>=0.41.0
+# Production requirements
+# Разделены на:
+# - requirements-light.txt: легковесные зависимости (HTTP, utils)
+# - requirements-heavy.txt: тяжеловесные ML/AI зависимости
 
-# Core LangChain - используем последние версии
-langchain>=0.1.16
-langchain-community>=0.0.38
-langchain-core>=0.1.52
-
-# Embeddings - для Python 3.12+
-langchain-huggingface>=0.0.3
-sentence-transformers>=2.7.0
-huggingface-hub>=0.23.0
-
-# Vector store
-chromadb>=0.4.24
-langchain-chroma>=0.1.0
-# Зависимости для chromadb
-onnxruntime>=1.18.0
-tokenizers>=0.19.1
-pydantic>=2.7.0
-pydantic-settings>=2.2.0
-
-# Document processing
-pypdf>=4.2.0
-python-dotenv>=1.0.1
-unstructured>=0.13.7
-
-# Data processing
-pandas>=2.2.0
-numpy>=1.26.4
-scipy>=1.13.0
-
-# HTTP and async
-fastapi>=0.115.0
-uvicorn[standard]>=0.37.0
-httpx>=0.27.0
-anyio>=4.3.0
-
-# Utils
-tqdm>=4.66.0
-colorama>=0.4.6  # Для Windows
-typing-extensions>=4.11.0
-packaging>=24.0
-
-# SQLite для chromadb
-sqlite3-api>=2.0.0
+-r requirements-light.txt
+-r requirements-heavy.txt

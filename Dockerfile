@@ -9,11 +9,12 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for better caching
-COPY requirements.txt .
+# Copy and install dependencies in order: heavy first (changes rarely), then light (changes often)
+COPY requirements-heavy.txt .
+RUN pip install --no-cache-dir -r requirements-heavy.txt
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements-light.txt .
+RUN pip install --no-cache-dir -r requirements-light.txt
 
 # Copy application code
 COPY rag/ ./rag/
