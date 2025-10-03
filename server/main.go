@@ -54,7 +54,7 @@ type RAGResponse struct {
 type Document struct {
 	ID              string                 `json:"id"`
 	Content         string                 `json:"content"`
-	Metadata        map[string]interface{} `json:"metadata"`
+	Metadata        map[string]any `json:"metadata"`
 	SimilarityScore float64                `json:"similarity_score"`
 }
 
@@ -68,7 +68,7 @@ type InitializeRAGInput struct {
 
 type InitializeRAGOutput struct {
 	Message string                 `json:"message" jsonschema:"Initialization result message"`
-	Data    map[string]interface{} `json:"data,omitempty" jsonschema:"Initialization data"`
+	Data    map[string]any `json:"data,omitempty" jsonschema:"Initialization data"`
 }
 
 type SearchDocumentsInput struct {
@@ -85,7 +85,7 @@ type GetSystemStatusInput struct {
 }
 
 type GetSystemStatusOutput struct {
-	Status map[string]interface{} `json:"status" jsonschema:"System status information"`
+	Status map[string]any `json:"status" jsonschema:"System status information"`
 }
 
 type SessionManagementInput struct {
@@ -93,7 +93,7 @@ type SessionManagementInput struct {
 }
 
 type SessionManagementOutput struct {
-	Result interface{} `json:"result" jsonschema:"Session management result"`
+	Result any `json:"result" jsonschema:"Session management result"`
 }
 
 func NewRAGClient(baseURL string) *RAGClient {
@@ -198,7 +198,7 @@ func initializeRAGTool(ragClient *RAGClient) func(
 			return nil, InitializeRAGOutput{}, err
 		}
 
-		data, _ := resp.Data.(map[string]interface{})
+		data, _ := resp.Data.(map[string]any)
 		return nil, InitializeRAGOutput{
 			Message: resp.Message,
 			Data:    data,
@@ -228,16 +228,16 @@ func searchDocumentsTool(ragClient *RAGClient) func(
 		// Parse documents from response
 		var documents []Document
 		if resp.Data != nil {
-			if docsData, ok := resp.Data.([]interface{}); ok {
+			if docsData, ok := resp.Data.([]any); ok {
 				documents = make([]Document, 0, len(docsData))
 				for _, docData := range docsData {
-					if docMap, ok := docData.(map[string]interface{}); ok {
+					if docMap, ok := docData.(map[string]any); ok {
 						doc := Document{
 							ID:              getString(docMap, "id"),
 							Content:         getString(docMap, "content"),
 							SimilarityScore: getFloat64(docMap, "similarity_score"),
 						}
-						if metadata, ok := docMap["metadata"].(map[string]interface{}); ok {
+						if metadata, ok := docMap["metadata"].(map[string]any); ok {
 							doc.Metadata = metadata
 						}
 						documents = append(documents, doc)
@@ -248,6 +248,9 @@ func searchDocumentsTool(ragClient *RAGClient) func(
 
 		// Get user_id from OAuth context (may be empty for unauthenticated requests)
 		userID, _ := ctx.Value(userIDKey).(string)
+
+		// Save original documents for logging (before filtering)
+		originalDocuments := documents
 
 		// Filter out chunks user has already seen (only if authenticated)
 		if userID != "" && sessionManager != nil {
@@ -303,6 +306,18 @@ func searchDocumentsTool(ragClient *RAGClient) func(
 			}
 		}
 
+		// Save search log if user is authenticated and session manager is available
+		if userID != "" && sessionManager != nil {
+			// Prepare RAG response (original documents before filtering, as JSON)
+			ragResponseJSON, _ := json.Marshal(originalDocuments)
+			ragResponseStr := string(ragResponseJSON)
+
+			// Save the search log
+			if err := sessionManager.SaveSearchLog(userID, input.Query, ragResponseStr, response); err != nil {
+				log.Printf("⚠️ Failed to save search log: %v", err)
+			}
+		}
+
 		return nil, SearchDocumentsOutput{Response: response}, nil
 	}
 }
@@ -322,9 +337,9 @@ func getSystemStatusTool(ragClient *RAGClient) func(
 			return nil, GetSystemStatusOutput{}, err
 		}
 
-		status := make(map[string]interface{})
+		status := make(map[string]any)
 		if resp.Data != nil {
-			if statusData, ok := resp.Data.(map[string]interface{}); ok {
+			if statusData, ok := resp.Data.(map[string]any); ok {
 				status = statusData
 			}
 		}
@@ -393,7 +408,7 @@ func sessionManagementTool() func(
 }
 
 // Helper functions
-func getString(m map[string]interface{}, key string) string {
+func getString(m map[string]any, key string) string {
 	if val, ok := m[key]; ok {
 		if str, ok := val.(string); ok {
 			return str
@@ -402,7 +417,7 @@ func getString(m map[string]interface{}, key string) string {
 	return ""
 }
 
-func getFloat64(m map[string]interface{}, key string) float64 {
+func getFloat64(m map[string]any, key string) float64 {
 	if val, ok := m[key]; ok {
 		if f, ok := val.(float64); ok {
 			return f
@@ -527,10 +542,49 @@ func main() {
 	// Register MCP endpoint
 	http.Handle("/sse", mcpHandler)
 
+	// Add search logs endpoint (all logs or filtered by user_id)
+	http.HandleFunc("/search-logs", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Get optional user_id parameter
+		userID := r.URL.Query().Get("user_id")
+		if userID == "" {
+			userID = r.Header.Get("X-User-ID")
+		}
+
+		// Get optional limit parameter
+		limitStr := r.URL.Query().Get("limit")
+		limit := 0
+		if limitStr != "" {
+			fmt.Sscanf(limitStr, "%d", &limit)
+		}
+
+		// Get logs (userID empty = all logs)
+		logs, err := sessionManager.GetSearchLogs(userID, limit)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		response := map[string]any{
+			"count": len(logs),
+			"logs":  logs,
+		}
+		if userID != "" {
+			response["user_id"] = userID
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	})
+
 	// Create logging middleware for all requests
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("📡 %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
-		if r.URL.Path != "/sse" {
+		if r.URL.Path != "/sse" && r.URL.Path != "/search-logs" {
 			http.NotFound(w, r)
 		}
 	})
@@ -548,6 +602,9 @@ func main() {
 	log.Printf("   GET  /oauth/authorize - Authorization endpoint")
 	log.Printf("   POST /oauth/token - Token endpoint")
 	log.Printf("   POST /register - Dynamic client registration")
+	log.Printf("📋 Search logs endpoint:")
+	log.Printf("   GET  /search-logs - Get all search logs")
+	log.Printf("   GET  /search-logs?user_id=<user>&limit=<n> - Get user search logs")
 
 	// Start the HTTP server
 	if err := http.ListenAndServe(serverAddr, nil); err != nil {

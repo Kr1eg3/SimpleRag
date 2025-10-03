@@ -49,6 +49,18 @@ func (sm *SimpleSessionManager) initTables() error {
 	CREATE INDEX IF NOT EXISTS idx_user_chunks_user_id ON user_chunks(user_id);
 	CREATE INDEX IF NOT EXISTS idx_user_chunks_chunk_id ON user_chunks(chunk_id);
 	CREATE UNIQUE INDEX IF NOT EXISTS idx_user_chunks_unique ON user_chunks(user_id, chunk_id);
+
+	CREATE TABLE IF NOT EXISTS search_logs (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id TEXT NOT NULL,
+		query TEXT NOT NULL,
+		rag_response TEXT,
+		mcp_response TEXT,
+		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_search_logs_user_id ON search_logs(user_id);
+	CREATE INDEX IF NOT EXISTS idx_search_logs_timestamp ON search_logs(timestamp);
 	`
 
 	_, err := sm.db.Exec(query)
@@ -166,6 +178,72 @@ func (sm *SimpleSessionManager) FilterNewChunks(userID string, chunkIDs []string
 
 	log.Printf("🔍 Filtered %d chunks -> %d new chunks for user %s", len(chunkIDs), len(newChunks), userID)
 	return newChunks, nil
+}
+
+// SearchLog represents a search log entry
+type SearchLog struct {
+	ID          int       `json:"id"`
+	UserID      string    `json:"user_id"`
+	Query       string    `json:"query"`
+	RAGResponse string    `json:"rag_response"`
+	MCPResponse string    `json:"mcp_response"`
+	Timestamp   time.Time `json:"timestamp"`
+}
+
+// SaveSearchLog saves a search query and its responses
+func (sm *SimpleSessionManager) SaveSearchLog(userID, query, ragResponse, mcpResponse string) error {
+	sm.mutex.Lock()
+	defer sm.mutex.Unlock()
+
+	insertQuery := `INSERT INTO search_logs (user_id, query, rag_response, mcp_response, timestamp) VALUES (?, ?, ?, ?, ?)`
+	_, err := sm.db.Exec(insertQuery, userID, query, ragResponse, mcpResponse, time.Now())
+	if err != nil {
+		return fmt.Errorf("failed to save search log: %w", err)
+	}
+
+	log.Printf("📝 Saved search log for user %s: %s", userID, query)
+	return nil
+}
+
+// GetSearchLogs retrieves search logs with optional userID filter and limit
+// If userID is empty, returns all logs
+func (sm *SimpleSessionManager) GetSearchLogs(userID string, limit int) ([]SearchLog, error) {
+	sm.mutex.RLock()
+	defer sm.mutex.RUnlock()
+
+	var query string
+	var rows *sql.Rows
+	var err error
+
+	if userID != "" {
+		query = `SELECT id, user_id, query, rag_response, mcp_response, timestamp FROM search_logs WHERE user_id = ? ORDER BY timestamp DESC`
+		if limit > 0 {
+			query += fmt.Sprintf(" LIMIT %d", limit)
+		}
+		rows, err = sm.db.Query(query, userID)
+	} else {
+		query = `SELECT id, user_id, query, rag_response, mcp_response, timestamp FROM search_logs ORDER BY timestamp DESC`
+		if limit > 0 {
+			query += fmt.Sprintf(" LIMIT %d", limit)
+		}
+		rows, err = sm.db.Query(query)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to query search logs: %w", err)
+	}
+	defer rows.Close()
+
+	var logs []SearchLog
+	for rows.Next() {
+		var log SearchLog
+		if err := rows.Scan(&log.ID, &log.UserID, &log.Query, &log.RAGResponse, &log.MCPResponse, &log.Timestamp); err != nil {
+			continue
+		}
+		logs = append(logs, log)
+	}
+
+	return logs, nil
 }
 
 // Close closes the database connection
