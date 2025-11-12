@@ -61,6 +61,12 @@ func (sm *SimpleSessionManager) initTables() error {
 
 	CREATE INDEX IF NOT EXISTS idx_search_logs_user_id ON search_logs(user_id);
 	CREATE INDEX IF NOT EXISTS idx_search_logs_timestamp ON search_logs(timestamp);
+
+	CREATE TABLE IF NOT EXISTS user_active_database (
+		user_id TEXT PRIMARY KEY,
+		database_name TEXT NOT NULL,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
 	`
 
 	_, err := sm.db.Exec(query)
@@ -244,6 +250,47 @@ func (sm *SimpleSessionManager) GetSearchLogs(userID string, limit int) ([]Searc
 	}
 
 	return logs, nil
+}
+
+// GetUserActiveDatabase returns the active database name for a user
+func (sm *SimpleSessionManager) GetUserActiveDatabase(userID string) (string, error) {
+	sm.mutex.RLock()
+	defer sm.mutex.RUnlock()
+
+	var databaseName string
+	query := `SELECT database_name FROM user_active_database WHERE user_id = ?`
+	err := sm.db.QueryRow(query, userID).Scan(&databaseName)
+
+	if err == sql.ErrNoRows {
+		// Return default if not set
+		return "default", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("failed to get active database: %w", err)
+	}
+
+	return databaseName, nil
+}
+
+// SetUserActiveDatabase sets the active database for a user
+func (sm *SimpleSessionManager) SetUserActiveDatabase(userID, databaseName string) error {
+	sm.mutex.Lock()
+	defer sm.mutex.Unlock()
+
+	query := `
+		INSERT INTO user_active_database (user_id, database_name, updated_at)
+		VALUES (?, ?, ?)
+		ON CONFLICT(user_id) DO UPDATE SET
+			database_name = excluded.database_name,
+			updated_at = excluded.updated_at
+	`
+	_, err := sm.db.Exec(query, userID, databaseName, time.Now())
+	if err != nil {
+		return fmt.Errorf("failed to set active database: %w", err)
+	}
+
+	log.Printf("🔄 User %s switched to database '%s'", userID, databaseName)
+	return nil
 }
 
 // Close closes the database connection

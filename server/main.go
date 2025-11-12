@@ -39,8 +39,9 @@ type InitializeRAGRequest struct {
 }
 
 type SearchRequest struct {
-	Query string `json:"query"`
-	K     int    `json:"k"`
+	Query        string `json:"query"`
+	K            int    `json:"k"`
+	DatabaseName string `json:"database_name"`
 }
 
 type RAGResponse struct {
@@ -94,6 +95,24 @@ type SessionManagementInput struct {
 
 type SessionManagementOutput struct {
 	Result any `json:"result" jsonschema:"Session management result"`
+}
+
+type SwitchDatabaseInput struct {
+	DatabaseName string `json:"database_name" jsonschema:"Name of the database to switch to"`
+}
+
+type SwitchDatabaseOutput struct {
+	Message      string `json:"message" jsonschema:"Result message"`
+	DatabaseName string `json:"database_name" jsonschema:"Active database name"`
+}
+
+type ListDatabasesInput struct {
+	// No input needed
+}
+
+type ListDatabasesOutput struct {
+	Databases []map[string]any `json:"databases" jsonschema:"List of available databases"`
+	Count     int              `json:"count" jsonschema:"Number of databases"`
 }
 
 func NewRAGClient(baseURL string) *RAGClient {
@@ -158,13 +177,43 @@ func (c *RAGClient) InitializeRAG(dataPath string, loadExisting bool, chunkSize,
 	return c.makeRequest("/initialize", req)
 }
 
-func (c *RAGClient) SearchDocuments(query string, k int) (*RAGResponse, error) {
+func (c *RAGClient) SearchDocuments(query string, k int, databaseName string) (*RAGResponse, error) {
 	req := SearchRequest{
-		Query: query,
-		K:     k,
+		Query:        query,
+		K:            k,
+		DatabaseName: databaseName,
 	}
 
 	return c.makeRequest("/search", req)
+}
+
+func (c *RAGClient) ListDatabases() (*RAGResponse, error) {
+	req, err := http.NewRequest("GET", c.baseURL+"/list_databases", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	var ragResp RAGResponse
+	if err := json.Unmarshal(respBody, &ragResp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	if !ragResp.Success {
+		return nil, fmt.Errorf("RAG service error: %s", ragResp.Error)
+	}
+
+	return &ragResp, nil
 }
 
 func (c *RAGClient) GetStatus() (*RAGResponse, error) {
@@ -220,7 +269,18 @@ func searchDocumentsTool(ragClient *RAGClient) func(
 			input.K = 5
 		}
 
-		resp, err := ragClient.SearchDocuments(input.Query, input.K)
+		// Get user_id from OAuth context (may be empty for unauthenticated requests)
+		userID, _ := ctx.Value(userIDKey).(string)
+
+		// Get user's active database
+		databaseName := "default"
+		if userID != "" && sessionManager != nil {
+			if dbName, err := sessionManager.GetUserActiveDatabase(userID); err == nil && dbName != "" {
+				databaseName = dbName
+			}
+		}
+
+		resp, err := ragClient.SearchDocuments(input.Query, input.K, databaseName)
 		if err != nil {
 			return nil, SearchDocumentsOutput{}, err
 		}
@@ -245,9 +305,6 @@ func searchDocumentsTool(ragClient *RAGClient) func(
 				}
 			}
 		}
-
-		// Get user_id from OAuth context (may be empty for unauthenticated requests)
-		userID, _ := ctx.Value(userIDKey).(string)
 
 		// Save original documents for logging (before filtering)
 		originalDocuments := documents
@@ -371,7 +428,7 @@ func sessionManagementTool() func(
 		input SessionManagementInput,
 	) (*mcp.CallToolResult, SessionManagementOutput, error) {
 		// Get user_id from OAuth context (may be empty for unauthenticated requests)
-		userID, _ := ctx.Value("user_id").(string)
+		userID, _ := ctx.Value(userIDKey).(string)
 
 		switch input.Action {
 		case "clear_history":
@@ -404,6 +461,105 @@ func sessionManagementTool() func(
 		default:
 			return nil, SessionManagementOutput{}, fmt.Errorf("unknown action: %s", input.Action)
 		}
+	}
+}
+
+func switchDatabaseTool(ragClient *RAGClient) func(
+	ctx context.Context,
+	req *mcp.CallToolRequest,
+	input SwitchDatabaseInput,
+) (*mcp.CallToolResult, SwitchDatabaseOutput, error) {
+	return func(
+		ctx context.Context,
+		req *mcp.CallToolRequest,
+		input SwitchDatabaseInput,
+	) (*mcp.CallToolResult, SwitchDatabaseOutput, error) {
+		// Get user_id from OAuth context
+		userID, _ := ctx.Value(userIDKey).(string)
+		if userID == "" {
+			return nil, SwitchDatabaseOutput{}, fmt.Errorf("user not authenticated")
+		}
+
+		if sessionManager == nil {
+			return nil, SwitchDatabaseOutput{}, fmt.Errorf("session manager not available")
+		}
+
+		// Verify database exists by listing databases
+		listResp, err := ragClient.ListDatabases()
+		if err != nil {
+			return nil, SwitchDatabaseOutput{}, fmt.Errorf("failed to list databases: %w", err)
+		}
+
+		// Parse the response to check if database exists
+		found := false
+		if listResp.Data != nil {
+			if dataMap, ok := listResp.Data.(map[string]any); ok {
+				if databases, ok := dataMap["databases"].([]any); ok {
+					for _, db := range databases {
+						if dbMap, ok := db.(map[string]any); ok {
+							if dbMap["name"] == input.DatabaseName {
+								found = true
+								break
+							}
+						}
+					}
+				}
+			}
+		}
+
+		if !found {
+			return nil, SwitchDatabaseOutput{}, fmt.Errorf("database '%s' not found", input.DatabaseName)
+		}
+
+		// Save to session manager
+		if err := sessionManager.SetUserActiveDatabase(userID, input.DatabaseName); err != nil {
+			return nil, SwitchDatabaseOutput{}, fmt.Errorf("failed to switch database: %w", err)
+		}
+
+		return nil, SwitchDatabaseOutput{
+			Message:      fmt.Sprintf("Successfully switched to database '%s'", input.DatabaseName),
+			DatabaseName: input.DatabaseName,
+		}, nil
+	}
+}
+
+func listDatabasesTool(ragClient *RAGClient) func(
+	ctx context.Context,
+	req *mcp.CallToolRequest,
+	input ListDatabasesInput,
+) (*mcp.CallToolResult, ListDatabasesOutput, error) {
+	return func(
+		ctx context.Context,
+		req *mcp.CallToolRequest,
+		input ListDatabasesInput,
+	) (*mcp.CallToolResult, ListDatabasesOutput, error) {
+		resp, err := ragClient.ListDatabases()
+		if err != nil {
+			return nil, ListDatabasesOutput{}, err
+		}
+
+		databases := []map[string]any{}
+		count := 0
+
+		if resp.Data != nil {
+			if dataMap, ok := resp.Data.(map[string]any); ok {
+				if dbList, ok := dataMap["databases"].([]any); ok {
+					for _, db := range dbList {
+						if dbMap, ok := db.(map[string]any); ok {
+							databases = append(databases, dbMap)
+						}
+					}
+				}
+				if cnt, ok := dataMap["count"].(float64); ok {
+					count = int(cnt)
+				}
+			}
+		}
+
+		return nil, ListDatabasesOutput{
+			Databases: databases,
+			Count:     count,
+		}, nil
 	}
 }
 
@@ -517,6 +673,16 @@ func main() {
 		Description: "Manage user sessions and context history",
 	}, sessionManagementTool())
 
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "switch_database",
+		Description: "Switch to a different database for search operations",
+	}, switchDatabaseTool(ragClient))
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "list_databases",
+		Description: "List all available databases",
+	}, listDatabasesTool(ragClient))
+
 	// Create MCP handler
 	mcpHandler := mcp.NewStreamableHTTPHandler(func(req *http.Request) *mcp.Server {
 		// Extract OAuth token and add to context
@@ -592,10 +758,11 @@ func main() {
 	log.Printf("🚀 Starting Go MCP Server on http://%s", serverAddr)
 	log.Printf("🌐 External address: http://%s", externalAddr)
 	log.Printf("🐍 Python RAG Service URL: %s", config.PythonRAGURL)
-	log.Printf("📋 Available tools: initialize_rag, search_documents, get_system_status, session_management")
+	log.Printf("📋 Available tools: initialize_rag, search_documents, get_system_status, session_management, switch_database, list_databases")
 	log.Printf("🔗 MCP endpoint: http://%s/sse", externalAddr)
 	log.Printf("💡 For Claude Code: claude mcd add -t http go-mcp http://%s/sse", externalAddr)
 	log.Printf("📊 Session Management: SQLite database (./sessions.db)")
+	log.Printf("🗄️  Multi-database support: Users can switch between different vector databases")
 	log.Printf("🔐 OAuth 2.1 endpoints (MCP-compliant):")
 	log.Printf("   GET  /.well-known/oauth-authorization-server - OAuth Discovery metadata")
 	log.Printf("   GET  /.well-known/oauth-protected-resource - Protected Resource metadata")
