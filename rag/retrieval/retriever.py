@@ -1,5 +1,5 @@
 from typing import List, Dict, Any, Optional
-from langchain.schema import Document
+from langchain_core.documents import Document
 from langchain_chroma import Chroma
 
 

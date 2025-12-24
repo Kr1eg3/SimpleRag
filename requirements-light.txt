@@ -1,5 +1,5 @@
 # Легковесные зависимости (быстрая установка)
-
+langchain-text-splitters>=0.0.1
 # Build tools
 setuptools>=68.0.0
 wheel>=0.41.0

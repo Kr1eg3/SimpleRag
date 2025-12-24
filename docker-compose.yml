@@ -19,7 +19,7 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8008/health"]
-      interval: 30s
+      interval: 120s
       timeout: 10s
       retries: 3
       start_period: 40s
@@ -43,12 +43,12 @@ services:
       - GO_MCP_PORT=8009
       - GO_MCP_EXTERNAL_HOST=192.168.0.71
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8009/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
+    #healthcheck:
+    #  test: ["CMD", "curl", "-f", "http://localhost:8009/health"]
+    #  interval: 300s
+    #  timeout: 10s
+    #  retries: 3
+    #  start_period: 20s
     networks:
       - simplerag-network
 

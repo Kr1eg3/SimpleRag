@@ -27,8 +27,8 @@ RUN mkdir -p data rag_data
 EXPOSE 8008
 
 # Health check - увеличены таймауты для ML библиотек
-HEALTHCHECK --interval=30s --timeout=15s --start-period=90s --retries=5 \
-    CMD curl -f http://localhost:8008/health || exit 1
+#HEALTHCHECK --interval=30s --timeout=15s --start-period=90s --retries=5 \
+#    CMD curl -f http://localhost:8008/health || exit 1
 
 # Run the application
 CMD ["python", "rag_http_server.py", "--host", "0.0.0.0", "--port", "8008"]
